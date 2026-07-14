@@ -1,0 +1,1277 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LaserCalc — калькулятор різання та гибки</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script>
+// ==================== FIREBASE CONFIG ====================
+// Встав сюди свій конфіг з Firebase Console:
+// Project settings (шестерня) → Your apps → Web app (</>) → SDK setup and configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyA8y5_m9pn30642jF9kqDHYC3ZmfOYQgro",
+  authDomain: "laser-calc.firebaseapp.com",
+  projectId: "laser-calc",
+  storageBucket: "laser-calc.firebasestorage.app",
+  messagingSenderId: "748578361315",
+  appId: "1:748578361315:web:f59808cb153039a301dad6"
+};
+// Email адміна (твій) — цей акаунт бачитиме клієнтів і замовлення всіх інших акаунтів.
+// Має ЗБІГАТИСЯ з тим email, яким ти сам зареєструєшся в застосунку.
+const ADMIN_EMAIL = "ВСТАВ_СВІЙ_EMAIL";
+// ============================================================
+</script>
+<style>
+  :root{
+    --bg: #14171a; --panel: #1c2024; --panel2: #22272b; --line: #333a40;
+    --text: #e8e6e1; --dim: #9aa3ab; --accent: #ff6a1a; --accent2: #3fa7ff;
+    --good: #4caf7d; --warn: #e0b23c; --bad:#e05c5c;
+    --mono: 'JetBrains Mono','SFMono-Regular',Consolas,monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background: radial-gradient(1200px 600px at 100% -10%, #23282d 0%, transparent 60%), var(--bg);
+    color:var(--text); font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    min-height:100vh;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:20px 16px 80px;}
+  a{color:var(--accent2);}
+  label{display:block;font-size:12.5px;color:var(--dim);margin-bottom:6px;}
+  select, input[type=number], input[type=text], input[type=password], textarea{
+    width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);
+    padding:9px 10px;border-radius:7px;font-size:14px;font-family:inherit;
+  }
+  textarea{resize:vertical;min-height:60px;}
+  select:focus, input:focus, textarea:focus{outline:none;border-color:var(--accent);}
+  .field{margin-bottom:12px;}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+  .hint{font-size:11.5px;color:var(--dim);margin-top:4px;line-height:1.4;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;}
+  .card + .card{margin-top:16px;}
+  .card h2{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--dim);margin:0 0 14px;font-weight:600;display:flex;align-items:center;gap:8px;}
+  .card h2 .n{color:var(--accent);font-family:var(--mono);}
+  button{font-family:inherit;cursor:pointer;}
+  .btn{background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:10px 16px;border-radius:8px;font-size:13.5px;font-weight:600;}
+  .btn:hover{border-color:var(--accent);}
+  .btn-primary{background:var(--accent);border-color:var(--accent);color:#1a1005;}
+  .btn-primary:hover{filter:brightness(1.08);}
+  .btn-danger{color:var(--bad);}
+  .btn-danger:hover{border-color:var(--bad);}
+  .btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;}
+  .toggle{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:3px;}
+  .toggle button{flex:1;background:transparent;border:none;color:var(--dim);padding:8px 10px;border-radius:5px;font-size:13px;font-weight:600;}
+  .toggle button.active{background:var(--accent);color:#1a1005;}
+  .switch{display:flex;align-items:center;gap:10px;font-size:13.5px;}
+  .switch input{width:auto;}
+
+  /* AUTH */
+  .auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .auth-card{width:100%;max-width:380px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:30px 26px;}
+  .auth-logo{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:6px;}
+  .auth-title{text-align:center;font-size:19px;font-weight:800;margin:0 0 2px;}
+  .auth-sub{text-align:center;color:var(--dim);font-size:12.5px;margin-bottom:22px;}
+  .auth-tabs{display:flex;gap:6px;background:var(--panel2);border-radius:8px;padding:3px;margin-bottom:18px;}
+  .auth-tabs button{flex:1;background:transparent;border:none;color:var(--dim);padding:9px;border-radius:6px;font-weight:700;font-size:13px;}
+  .auth-tabs button.active{background:var(--accent);color:#1a1005;}
+  .auth-err{color:var(--bad);font-size:12.5px;margin-top:10px;min-height:16px;}
+  .auth-note{font-size:11px;color:var(--dim);margin-top:16px;line-height:1.5;text-align:center;}
+
+  /* APP SHELL */
+  header.app{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:16px;flex-wrap:wrap;}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:17px;}
+  .user-chip{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--dim);}
+  .user-chip b{color:var(--text);}
+  nav.tabs{display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap;}
+  nav.tabs button{background:var(--panel2);border:1px solid var(--line);color:var(--dim);padding:9px 16px;border-radius:8px;font-size:13px;font-weight:700;}
+  nav.tabs button.active{background:var(--accent2);color:#071722;border-color:var(--accent2);}
+
+  .grid{display:grid;grid-template-columns:1.05fr 1fr;gap:18px;}
+  @media (max-width:860px){ .grid{grid-template-columns:1fr;} }
+
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{padding:8px 6px;text-align:left;border-bottom:1px solid var(--line);}
+  th{color:var(--dim);font-weight:600;text-transform:uppercase;font-size:10.5px;}
+  .price-tbl td{text-align:right;font-size:12px;}
+  .price-tbl td:first-child{text-align:left;}
+  .price-tbl input{width:100%;background:transparent;border:1px solid transparent;color:var(--text);text-align:right;padding:3px;border-radius:4px;font-family:var(--mono);font-size:12px;}
+  .price-tbl input:hover{border-color:var(--line);}
+  .price-tbl input:focus{border-color:var(--accent);background:var(--panel2);}
+  .tbl-wrap{max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:8px;}
+  .tbl-wrap table{margin:0;}
+  .tbl-wrap thead th{position:sticky;top:0;background:var(--panel2);z-index:1;}
+  .grp-air{background:rgba(255,255,255,.02);} .grp-n2{background:rgba(63,167,255,.05);} .grp-o2{background:rgba(255,106,26,.05);}
+
+  .dropzone{border:1.5px dashed var(--line);border-radius:8px;padding:20px 14px;text-align:center;color:var(--dim);font-size:13px;cursor:pointer;}
+  .dropzone:hover,.dropzone.drag{border-color:var(--accent);color:var(--text);background:#1f1712;}
+  .dxf-result{margin-top:12px;font-size:13px;background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:12px;display:none;}
+  .dxf-result.show{display:block;}
+  .dxf-result .kv{display:flex;justify-content:space-between;padding:3px 0;color:var(--dim);}
+  .dxf-result .kv b{color:var(--text);font-family:var(--mono);}
+  .dxf-warn{color:var(--warn);font-size:12px;margin-top:8px;line-height:1.4;}
+
+  .price-out{background:linear-gradient(135deg,#241a10,#1c2024);border:1px solid #4a3420;border-radius:10px;padding:20px;margin-top:16px;}
+  .price-out .total{font-size:32px;font-weight:800;font-family:var(--mono);color:var(--accent);}
+  .price-out .total span{font-size:15px;color:var(--dim);font-weight:500;margin-left:6px;}
+  .breakdown{margin-top:12px;border-top:1px solid var(--line);padding-top:12px;}
+  .breakdown .line{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;color:var(--dim);gap:10px;}
+  .breakdown .line b{color:var(--text);font-family:var(--mono);font-weight:500;white-space:nowrap;}
+  .breakdown .line.vat{border-top:1px dashed var(--line);margin-top:6px;padding-top:8px;}
+
+  .bend-row{display:grid;grid-template-columns:1fr 90px 100px 30px;gap:8px;margin-bottom:8px;align-items:center;}
+  .bend-row input{padding:7px 8px;}
+  .icon-btn{background:transparent;border:1px solid var(--line);color:var(--dim);width:30px;height:30px;border-radius:6px;font-size:15px;}
+  .icon-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .add-link{background:none;border:none;color:var(--accent2);font-size:13px;padding:6px 0;font-weight:600;}
+  .kg-box{display:flex;justify-content:space-between;align-items:center;background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:10px 12px;margin-top:4px;font-size:13px;}
+  .kg-box b{font-family:var(--mono);color:var(--accent2);}
+  .save-note{font-size:11px;color:var(--good);margin-top:8px;min-height:14px;}
+
+  .empty{color:var(--dim);font-size:13px;padding:20px 0;text-align:center;}
+  .pill{display:inline-block;background:var(--panel2);border:1px solid var(--line);border-radius:20px;padding:2px 10px;font-size:11px;color:var(--dim);}
+
+  #printArea{display:none;}
+  @media print{
+    body *{visibility:hidden;}
+    #printArea, #printArea *{visibility:visible;}
+    #printArea{display:block;position:absolute;left:0;top:0;width:100%;padding:20px;color:#000;background:#fff;}
+    #printArea table{width:100%;border-collapse:collapse;}
+    #printArea td, #printArea th{border:1px solid #999;padding:6px 8px;font-size:12px;}
+    #printArea h1{font-size:18px;} #printArea h2{font-size:14px;color:#333;}
+  }
+  footer{margin-top:36px;color:var(--dim);font-size:11.5px;text-align:center;line-height:1.6;}
+
+  /* ===== INTRO ANIMATION ===== */
+  .intro-overlay{
+    position:fixed; inset:0; z-index:999; display:none; align-items:center; justify-content:center;
+    background:
+      repeating-linear-gradient(115deg, #1b1f23 0px, #1b1f23 2px, #212629 2px, #212629 4px),
+      radial-gradient(900px 500px at 50% 30%, #262b30 0%, #101214 70%);
+    opacity:1; transition:opacity .6s ease;
+  }
+  .intro-overlay.hide{ opacity:0; pointer-events:none; }
+  .intro-stage{ position:relative; width:min(620px,90vw); height:220px; }
+  .intro-beam{
+    position:absolute; top:50%; left:0; width:0; height:3px; transform:translateY(-50%);
+    background:linear-gradient(90deg, transparent, #fff8ec, #ff6a1a);
+    box-shadow:0 0 18px 4px rgba(255,106,26,.85), 0 0 46px 12px rgba(255,106,26,.35);
+    animation:introSweep 1.3s cubic-bezier(.65,0,.35,1) forwards;
+  }
+  @keyframes introSweep{ from{width:0;} to{width:100%;} }
+  .intro-sparks{ position:absolute; inset:0; overflow:visible; }
+  .spark{
+    position:absolute; width:3px; height:3px; border-radius:50%; background:#ffd68a;
+    box-shadow:0 0 7px 2px rgba(255,160,60,.9);
+    animation:sparkFly .55s ease-out forwards;
+  }
+  @keyframes sparkFly{ from{opacity:1; transform:translate(0,0) scale(1);} to{opacity:0; transform:var(--spark-end) scale(.15);} }
+  .intro-logo{
+    position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    opacity:0; transform:scale(.92);
+    animation:introReveal .7s ease forwards; animation-delay:1.15s;
+  }
+  @keyframes introReveal{
+    0%{opacity:0; transform:scale(.92); filter:brightness(2.6);}
+    55%{opacity:1; transform:scale(1.03); filter:brightness(1.4);}
+    100%{opacity:1; transform:scale(1); filter:brightness(1);}
+  }
+  .intro-title{font-size:30px;font-weight:800;margin-top:12px;letter-spacing:-.02em;}
+  .intro-sub{font-size:13px;color:var(--dim);margin-top:4px;}
+  .intro-skip{
+    position:absolute; bottom:24px; right:24px; background:var(--panel2); border:1px solid var(--line);
+    color:var(--dim); padding:8px 14px; border-radius:8px; font-size:12px; cursor:pointer;
+  }
+  .intro-skip:hover{border-color:var(--accent); color:var(--text);}
+</style>
+</head>
+<body>
+
+<!-- SETUP REQUIRED SCREEN -->
+<div class="auth-wrap" id="setupScreen" style="display:none;">
+  <div class="auth-card" style="max-width:480px;">
+    <div class="auth-title">⚙ Потрібно підключити Firebase</div>
+    <div class="auth-sub" style="margin-bottom:18px;">Ще один крок — і авторизація та дані працюватимуть на будь-якому пристрої.</div>
+    <div style="font-size:13px;line-height:1.7;color:var(--text);">
+      1. Зайди на <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a> і створи проєкт (безкоштовно, потрібен лише Google-акаунт).<br>
+      2. Build → <b>Authentication</b> → Get started → Sign-in method → увімкни <b>Email/Password</b>.<br>
+      3. Build → <b>Firestore Database</b> → Create database → обери регіон (найближчий) → почни в production mode.<br>
+      4. У Firestore → вкладка <b>Rules</b> → встав правила (я дав їх окремо) → Publish.<br>
+      5. Шестерня (Project settings) → внизу <b>Your apps</b> → іконка <b>&lt;/&gt;</b> (Web) → зареєструй застосунок → скопіюй об'єкт <code>firebaseConfig</code>.<br>
+      6. Встав його у файл замість <code>"ВСТАВ_СЮДИ"</code> (на самому початку HTML-файлу) і збережи файл.<br>
+      7. Онови цю сторінку.
+    </div>
+  </div>
+</div>
+
+<!-- AUTH SCREEN -->
+<div class="auth-wrap" id="authScreen">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <svg width="30" height="30" viewBox="0 0 34 34" fill="none">
+        <path d="M2 30 L14 6 L20 6 L32 30" stroke="#ff6a1a" stroke-width="2" stroke-linejoin="round"/>
+        <circle cx="17" cy="6" r="2.4" fill="#ff6a1a"/>
+        <path d="M17 8.5 L17 22" stroke="#3fa7ff" stroke-width="1.5" stroke-dasharray="1 3"/>
+      </svg>
+    </div>
+    <div class="auth-title">LaserCalc</div>
+    <div class="auth-sub">Калькулятор лазерного різання та гибки</div>
+    <div class="auth-tabs">
+      <button id="tabLoginBtn" class="active">Увійти</button>
+      <button id="tabRegisterBtn">Реєстрація</button>
+    </div>
+
+    <div id="loginForm">
+      <div class="field"><label>Email</label><input type="text" id="loginUser" autocomplete="username" placeholder="you@example.com"></div>
+      <div class="field"><label>Пароль</label><input type="password" id="loginPass" autocomplete="current-password"></div>
+      <button class="btn btn-primary" style="width:100%;" id="doLogin">Увійти</button>
+    </div>
+
+    <div id="registerForm" style="display:none;">
+      <div class="field"><label>Email</label><input type="text" id="regUser" autocomplete="username" placeholder="you@example.com"></div>
+      <div class="field"><label>Пароль (мінімум 6 символів)</label><input type="password" id="regPass" autocomplete="new-password"></div>
+      <div class="field"><label>Повторити пароль</label><input type="password" id="regPass2" autocomplete="new-password"></div>
+      <button class="btn btn-primary" style="width:100%;" id="doRegister">Створити акаунт</button>
+    </div>
+
+    <div class="auth-err" id="authErr"></div>
+    <div class="auth-note">Логін і пароль потрібен формату email (не обов'язково реальна поштова скринька — головне щоб було "щось@щось"). Дані синхронізуються через Google Firebase і доступні з будь-якого пристрою під цим акаунтом.</div>
+  </div>
+</div>
+
+<!-- APP SCREEN -->
+<div class="wrap" id="appScreen" style="display:none;">
+  <header class="app">
+    <div class="brand">
+      <svg width="26" height="26" viewBox="0 0 34 34" fill="none">
+        <path d="M2 30 L14 6 L20 6 L32 30" stroke="#ff6a1a" stroke-width="2" stroke-linejoin="round"/>
+        <circle cx="17" cy="6" r="2.4" fill="#ff6a1a"/>
+      </svg>
+      LaserCalc
+    </div>
+    <div class="user-chip">
+      Акаунт: <b id="userLabel">—</b>
+      <button class="btn" id="logoutBtn">Вийти</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="active" data-tab="calc">Калькулятор</button>
+    <button data-tab="clients">Клієнти</button>
+    <button data-tab="orders">Історія замовлень</button>
+    <button data-tab="team" id="teamTabBtn" style="display:none;">Команда</button>
+    <button data-tab="settings">Налаштування</button>
+  </nav>
+
+  <!-- ===== CALC TAB ===== -->
+  <div id="tabpage-calc">
+    <div class="grid">
+      <div>
+        <div class="card">
+          <h2><span class="n">01</span> Матеріал і газ</h2>
+          <div class="row">
+            <div class="field">
+              <label>Матеріал</label>
+              <select id="material">
+                <option value="ss">Нержавіюча сталь</option>
+                <option value="al">Алюміній</option>
+                <option value="cs">Вуглецева сталь</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Товщина, мм</label>
+              <select id="thickness"></select>
+            </div>
+          </div>
+          <div class="field">
+            <label>Різальний газ</label>
+            <div class="toggle" id="gasToggle">
+              <button data-gas="air">Повітря</button><button data-gas="n2">N2</button><button data-gas="o2">O2</button>
+            </div>
+            <div class="hint" id="gasHint"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2><span class="n">02</span> Параметри деталі</h2>
+          <div class="toggle" id="modeToggle" style="margin-bottom:14px;">
+            <button data-mode="manual" class="active">Ввести вручну</button>
+            <button data-mode="dxf">Завантажити DXF</button>
+          </div>
+
+          <div id="manualPane">
+            <div class="row">
+              <div class="field"><label>Довжина різу, мм</label><input type="number" id="cutLength" value="0" min="0" step="1"></div>
+              <div class="field"><label>Кількість пробивок</label><input type="number" id="pierceCount" value="1" min="0" step="1"></div>
+            </div>
+            <div class="field"><label>Кількість деталей у замовленні</label><input type="number" id="qty" value="1" min="1" step="1"></div>
+          </div>
+
+          <div id="dxfPane" style="display:none;">
+            <div class="field">
+              <label>Шари ліній згину (через кому)</label>
+              <input type="text" id="bendLayers" value="BEND,ГИБ,СГИБ,СГИН,FOLD,BEND_LINE,BEND LINES,K_LINE,ЛИНИЯ ГИБА,ЛІНІЯ ЗГИНУ">
+              <div class="hint">Об'єкти на цих шарах виключаються з довжини різу і рахуються як гибка.</div>
+            </div>
+            <div class="dropzone" id="dropzone">
+              <div>📐 Перетягни <strong>.dxf</strong> файл сюди або натисни, щоб обрати<br><span style="font-size:11px;">SolidWorks, CorelDRAW, AutoCAD — блоки, сплайни, дуги, еліпси</span></div>
+              <input type="file" id="fileInput" accept=".dxf" style="display:none;">
+            </div>
+            <div class="dxf-result" id="dxfResult">
+              <div class="kv"><span>Довжина різу (без згинів)</span><b id="dxfLen">—</b></div>
+              <div class="kv"><span>Пробивок</span><b id="dxfPierce">—</b></div>
+              <div class="kv"><span>Ліній згину</span><b id="dxfBend">—</b></div>
+              <div class="kv"><span>Розпізнано об'єктів</span><b id="dxfEnt">—</b></div>
+              <div class="dxf-warn" id="dxfWarn"></div>
+            </div>
+            <div class="row" style="margin-top:12px;">
+              <div class="field"><label>Довжина різу, мм (можна виправити)</label><input type="number" id="cutLengthDxf" value="0" min="0" step="1"></div>
+              <div class="field"><label>Кількість пробивок (можна виправити)</label><input type="number" id="pierceCountDxf" value="0" min="0" step="1"></div>
+            </div>
+            <div class="field"><label>Кількість деталей у замовленні</label><input type="number" id="qtyDxf" value="1" min="1" step="1"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2><span class="n">03</span> Лист металу — вага і вартість</h2>
+          <div class="row3">
+            <div class="field"><label>Довжина листа, мм</label><input type="number" id="sheetLen" value="0" min="0" step="1"></div>
+            <div class="field"><label>Ширина листа, мм</label><input type="number" id="sheetWid" value="0" min="0" step="1"></div>
+            <div class="field"><label>Ціна за кг, грн</label><input type="number" id="pricePerKg" value="50" min="0" step="0.5"></div>
+          </div>
+          <div class="kg-box"><span>Вага листа</span><b id="sheetWeight">0.00 кг</b></div>
+          <div class="hint" id="kgHint" style="margin-top:8px;"></div>
+        </div>
+
+        <div class="card">
+          <h2><span class="n">04</span> Гибка</h2>
+          <div id="bendRows"></div>
+          <button class="add-link" id="addBend">+ додати лінію гибки</button>
+        </div>
+
+        <div class="card">
+          <h2><span class="n">05</span> Плівка на металі</h2>
+          <div class="switch" style="margin-bottom:10px;">
+            <input type="checkbox" id="filmOn"><label for="filmOn" style="margin:0;">Різ по металу з захисною плівкою (випалювання)</label>
+          </div>
+          <div class="field"><label>Ціна випалу плівки, грн/м різу</label><input type="number" id="filmPrice" value="3" min="0" step="0.5"></div>
+        </div>
+
+        <div class="card">
+          <h2><span class="n">06</span> Клієнт і ПДВ</h2>
+          <div class="field">
+            <label>Клієнт (опційно)</label>
+            <select id="quoteClient"><option value="">Без клієнта</option></select>
+          </div>
+          <div class="switch">
+            <input type="checkbox" id="vatOn"><label for="vatOn" style="margin:0;">Показати з ПДВ</label>
+          </div>
+          <div class="field" style="margin-top:10px;"><label>Ставка ПДВ, %</label><input type="number" id="vatRate" value="20" min="0" step="1"></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <h2><span class="n">₴</span> Прайс-таблиця різання — <span id="tblLabel">Нержавіюча сталь</span></h2>
+          <div class="tbl-wrap">
+            <table class="price-tbl" id="priceTable">
+              <thead>
+                <tr><th rowspan="2">Товщ,мм</th><th colspan="3">Ціна різу, грн/м</th><th colspan="3">Ціна пробивки, грн</th></tr>
+                <tr><th class="grp-air">Повітря</th><th class="grp-n2">N2</th><th class="grp-o2">O2</th><th class="grp-air">Повітря</th><th class="grp-n2">N2</th><th class="grp-o2">O2</th></tr>
+              </thead>
+              <tbody id="priceTbody"></tbody>
+            </table>
+          </div>
+          <div class="save-note" id="saveNote"></div>
+        </div>
+
+        <div class="price-out">
+          <div style="font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Вартість</div>
+          <div class="total" id="totalPrice">0.00 <span>грн</span></div>
+          <div class="breakdown" id="breakdown"></div>
+          <div class="btn-row">
+            <button class="btn btn-primary" id="saveOrderBtn">Зберегти в історію</button>
+            <button class="btn" id="pdfBtn">Завантажити PDF</button>
+            <button class="btn" id="xlsBtn">Завантажити Excel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== CLIENTS TAB ===== -->
+  <div id="tabpage-clients" style="display:none;">
+    <div class="card">
+      <h2><span class="n">+</span> Новий клієнт</h2>
+      <div class="row">
+        <div class="field"><label>Ім'я / компанія</label><input type="text" id="clName"></div>
+        <div class="field"><label>Телефон</label><input type="text" id="clPhone"></div>
+      </div>
+      <div class="field"><label>Нотатки</label><textarea id="clNotes"></textarea></div>
+      <button class="btn btn-primary" id="addClientBtn">Додати клієнта</button>
+    </div>
+    <div class="card">
+      <h2>Список клієнтів</h2>
+      <div id="clientsList"><div class="empty">Клієнтів ще немає</div></div>
+    </div>
+  </div>
+
+  <!-- ===== ORDERS TAB ===== -->
+  <div id="tabpage-orders" style="display:none;">
+    <div class="card">
+      <h2>Історія замовлень</h2>
+      <div id="ordersList"><div class="empty">Ще немає збережених замовлень</div></div>
+    </div>
+  </div>
+
+  <!-- ===== TEAM TAB (admin only) ===== -->
+  <div id="tabpage-team" style="display:none;">
+    <div class="card">
+      <h2>Клієнти й замовлення команди</h2>
+      <div class="hint" id="teamHint" style="margin-bottom:14px;">Видно лише твоєму акаунту. Паролі інших акаунтів тобі недоступні — тільки клієнтські бази і замовлення.</div>
+      <div id="teamList"><div class="empty">Завантаження…</div></div>
+    </div>
+  </div>
+
+  <!-- ===== SETTINGS TAB ===== -->
+  <div id="tabpage-settings" style="display:none;">
+    <div class="card">
+      <h2>Акаунт</h2>
+      <div class="field"><label>Поточний логін</label><input type="text" id="settingsUser" disabled></div>
+      <button class="btn btn-danger" id="wipeDataBtn">Видалити всі мої дані (клієнти/замовлення/прайси)</button>
+    </div>
+    <div class="card">
+      <h2>Експорт / резервна копія</h2>
+      <div class="hint" style="margin-bottom:10px;">Дані живуть тільки в цьому браузері. Щоб не втратити їх (переустановка браузера, інший пристрій) — вивантаж резервну копію у файл і за потреби заватаж назад.</div>
+      <div class="btn-row" style="margin-top:0;">
+        <button class="btn" id="exportBackupBtn">Вивантажити резервну копію (.json)</button>
+        <button class="btn" id="importBackupBtn">Завантажити резервну копію</button>
+        <input type="file" id="importBackupFile" accept=".json" style="display:none;">
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Дані зберігаються локально в цьому браузері (localStorage) — офлайн, без сервера.<br>
+    Для точних розрахунків перевіряй ціни в таблиці та результати розбору DXF.
+  </footer>
+</div>
+
+<div id="printArea"></div>
+
+<div class="intro-overlay" id="introOverlay">
+  <div class="intro-stage">
+    <div class="intro-beam"></div>
+    <div class="intro-sparks" id="introSparks"></div>
+    <div class="intro-logo">
+      <svg width="52" height="52" viewBox="0 0 34 34" fill="none">
+        <path d="M2 30 L14 6 L20 6 L32 30" stroke="#ff6a1a" stroke-width="2" stroke-linejoin="round"/>
+        <circle cx="17" cy="6" r="2.6" fill="#ff6a1a"/>
+        <path d="M17 8.5 L17 22" stroke="#3fa7ff" stroke-width="1.7" stroke-dasharray="1 3"/>
+      </svg>
+      <div class="intro-title">LaserCalc</div>
+      <div class="intro-sub">калькулятор різання та гибки</div>
+    </div>
+  </div>
+  <button class="intro-skip" id="introSkip">Пропустити ⏭</button>
+</div>
+
+<script>
+/* ============ FIREBASE INIT ============ */
+const FB_NOT_CONFIGURED = !firebaseConfig.apiKey || firebaseConfig.apiKey === 'ВСТАВ_СЮДИ';
+let auth = null, db = null;
+if(!FB_NOT_CONFIGURED){
+  firebase.initializeApp(firebaseConfig);
+  auth = firebase.auth();
+  db = firebase.firestore();
+  try{ db.enablePersistence({synchronizeTabs:true}); }catch(e){ console.warn('offline persistence not enabled', e); }
+}
+
+/* ============ AUTH (Firebase) ============ */
+function friendlyAuthError(err){
+  const code = err && err.code || '';
+  const map = {
+    'auth/email-already-in-use':'Такий email вже зареєстрований.',
+    'auth/invalid-email':'Невірний формат email.',
+    'auth/weak-password':'Пароль занадто простий (мінімум 6 символів).',
+    'auth/user-not-found':'Користувача з таким email не знайдено.',
+    'auth/wrong-password':'Невірний пароль.',
+    'auth/invalid-credential':'Невірний email або пароль.',
+    'auth/too-many-requests':'Забагато спроб. Спробуй трохи пізніше.',
+    'auth/network-request-failed':'Немає з\'єднання з інтернетом.'
+  };
+  return map[code] || (err && err.message) || 'Сталася помилка.';
+}
+async function registerUser(email, password){
+  if(password.length < 6) throw new Error('Пароль мінімум 6 символів');
+  try{
+    const cred = await auth.createUserWithEmailAndPassword(email.trim(), password);
+    return cred.user;
+  }catch(err){ throw new Error(friendlyAuthError(err)); }
+}
+async function loginUser(email, password){
+  try{
+    const cred = await auth.signInWithEmailAndPassword(email.trim(), password);
+    return cred.user;
+  }catch(err){ throw new Error(friendlyAuthError(err)); }
+}
+
+/* ============ PER-USER DATA (Firestore) ============ */
+function defaultMaterialsData(){
+  return JSON.parse(JSON.stringify({
+    ss: { label:"Нержавіюча сталь", density:7900, defaultPriceKg:250, rows:[
+      [0.5,8.33,10.71,13.64,0.94,1.25,0.63],[0.8,8.33,11.54,13.64,0.94,1.25,0.63],
+      [1.0,8.33,12.50,15.00,0.94,1.25,0.63],[1.2,8.33,15.00,15.00,0.94,1.25,0.63],
+      [1.5,8.33,18.75,15.00,0.94,1.25,0.63],[2.0,10.00,23.08,18.75,1.25,1.88,1.25],
+      [2.5,10.42,27.27,23.08,1.88,2.50,1.56],[3.0,16.67,37.50,27.27,2.50,3.13,1.88],
+      [4.0,25.00,50.00,33.33,3.13,3.75,2.50],[5.0,31.25,68.18,42.86,3.75,4.38,3.13],
+      [6.0,50.00,93.75,53.57,4.38,5.63,3.75],[8.0,62.50,125.00,62.50,7.50,8.75,6.25],
+      [10.0,83.33,176.47,83.33,11.25,12.50,9.38],[12.0,100.00,250.00,107.14,15.63,18.75,12.50],
+      [14.0,166.67,375.00,136.36,25.00,28.13,18.75],[16.0,250.00,600.00,166.67,34.38,40.63,28.13],
+      [18.0,0.00,1000.00,214.29,43.75,50.00,34.38],[20.0,0.00,1500.00,250.00,75.00,62.50,43.75],
+      [25.0,0.00,3000.00,300.00,93.75,87.50,50.00],[30.0,0.00,5000.00,600.00,93.75,112.50,68.75]
+    ]},
+    al: { label:"Алюміній", density:2700, defaultPriceKg:190, rows:[
+      [0.5,12.86,10.00,0,2.03,1.63,0],[0.8,12.86,10.00,0,2.03,1.63,0],[1.0,12.86,10.00,0,2.03,1.63,0],
+      [1.2,12.86,10.00,0,2.03,1.63,0],[1.5,12.86,10.00,0,2.03,1.63,0],[2.0,15.65,12.00,0,2.44,2.03,0],
+      [2.5,17.14,12.50,0,3.25,2.84,0],[3.0,27.69,20.00,0,4.47,3.66,0],[4.0,45.00,30.00,0,5.28,4.47,0],
+      [5.0,60.00,37.50,0,6.91,5.69,0],[6.0,100.00,60.00,0,8.94,7.31,0],[8.0,138.46,75.00,0,12.19,9.75,0],
+      [10.0,0.00,100.00,0,121.88,14.63,0],[12.0,0.00,120.00,0,121.88,20.31,0],[14.0,0.00,200.00,0,121.88,32.50,0],
+      [16.0,0.00,360.00,0,121.88,48.75,0],[18.0,0.00,600.00,0,121.88,65.00,0],[20.0,0.00,0.00,0,121.88,121.88,0],
+      [25.0,0.00,0.00,0,121.88,121.88,0],[30.0,0.00,0.00,0,121.88,121.88,0]
+    ]},
+    cs: { label:"Вуглецева сталь", density:7850, defaultPriceKg:50, rows:
+      [0.5,0.8,1.0,1.2,1.5,2.0,2.5,3.0,4.0,5.0,6.0,8.0,10.0,12.0,14.0,16.0,18.0,20.0,25.0,30.0].map(t=>[t,0,0,0,0,0,0])
+    }
+  }));
+}
+function defaultUserData(){
+  return {
+    ownerEmail: '',
+    materials: defaultMaterialsData(),
+    pricePerKg: { ss:250, al:190, cs:50 },
+    bends: [ {name:'Лінія 1', count:1, price:100} ],
+    bendLayers: 'BEND,ГИБ,СГИБ,СГИН,FOLD,BEND_LINE,BEND LINES,K_LINE,ЛИНИЯ ГИБА,ЛІНІЯ ЗГИНУ',
+    filmOn: false,
+    filmPrice: 3,
+    vatOn: false,
+    vatRate: 20,
+    clients: [],
+    orders: []
+  };
+}
+async function loadUserData(uid){
+  try{
+    const snap = await db.collection('users').doc(uid).get();
+    if(snap.exists){ return Object.assign(defaultUserData(), snap.data()); }
+    const fresh = defaultUserData();
+    await db.collection('users').doc(uid).set(fresh);
+    return fresh;
+  }catch(e){
+    console.error('loadUserData failed', e);
+    return defaultUserData();
+  }
+}
+let _saveTimer = null;
+function saveUserData(uid, data){
+  clearTimeout(_saveTimer);
+  const note = $('saveNote');
+  if(note) note.textContent = 'Збереження…';
+  _saveTimer = setTimeout(()=>{
+    db.collection('users').doc(uid).set(data)
+      .then(()=>{ if(note) { note.textContent='Синхронізовано ✓'; setTimeout(()=>{ if(note) note.textContent=''; },1200); } })
+      .catch(e=>{ console.error('save failed', e); if(note) note.textContent='Не вдалося зберегти (перевір інтернет) — зміни кешуються локально.'; });
+  }, 500);
+}
+
+
+/* ============ APP STATE ============ */
+let USER = null;
+let UD = null; // user data
+let CURRENT_USER_EMAIL = null;
+let state = { material:'ss', gas:'n2', mode:'manual' };
+const $ = id => document.getElementById(id);
+const GAS_COL = { air:{cut:1,pierce:4}, n2:{cut:2,pierce:5}, o2:{cut:3,pierce:6} };
+const GAS_HINTS = {
+  ss: {air:"Повітря — для тонких листів, дешевше.", n2:"N2 — чистий рез без окислення.", o2:"O2 — швидше й дешевше на товщині від ~10мм, є окалина."},
+  al: {air:"Повітря — стандартний варіант для алюмінію.", n2:"N2 — чистий рез без окислення.", o2:"O2 для алюмінію зазвичай не використовують."},
+  cs: {air:"Заповни ціни в таблиці праворуч.", n2:"Заповни ціни в таблиці праворуч.", o2:"Вуглецеву сталь зазвичай ріжуть киснем — заповни ціни."}
+};
+
+function persist(){
+  UD.bendLayers = $('bendLayers').value;
+  UD.filmOn = $('filmOn').checked;
+  UD.filmPrice = parseFloat($('filmPrice').value)||0;
+  UD.vatOn = $('vatOn').checked;
+  UD.vatRate = parseFloat($('vatRate').value)||0;
+  saveUserData(USER, UD);
+  const note = $('saveNote');
+  note.textContent = 'Збережено ✓';
+  clearTimeout(persist._t);
+  persist._t = setTimeout(()=>{ note.textContent=''; }, 1200);
+}
+
+/* ============ CALCULATOR UI ============ */
+function buildThicknessOptions(){
+  const sel = $('thickness'); sel.innerHTML='';
+  UD.materials[state.material].rows.forEach(r=>{
+    const opt = document.createElement('option');
+    opt.value = r[0]; opt.textContent = r[0].toFixed(2).replace(/\.?0+$/,'')+' мм';
+    sel.appendChild(opt);
+  });
+}
+function buildGasToggle(){
+  document.querySelectorAll('#gasToggle button').forEach(b=>b.classList.toggle('active', b.dataset.gas===state.gas));
+  $('gasHint').textContent = GAS_HINTS[state.material][state.gas];
+}
+document.querySelectorAll('#gasToggle button').forEach(b=>{
+  b.onclick = ()=>{ state.gas=b.dataset.gas; buildGasToggle(); calc(); };
+});
+function renderPriceTable(){
+  const d = UD.materials[state.material];
+  $('tblLabel').textContent = d.label;
+  const tbody = $('priceTbody'); tbody.innerHTML='';
+  d.rows.forEach((row, idx)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${row[0]}</td>
+      <td class="grp-air"><input type="number" step="0.01" data-idx="${idx}" data-col="1" value="${row[1]}"></td>
+      <td class="grp-n2"><input type="number" step="0.01" data-idx="${idx}" data-col="2" value="${row[2]}"></td>
+      <td class="grp-o2"><input type="number" step="0.01" data-idx="${idx}" data-col="3" value="${row[3]}"></td>
+      <td class="grp-air"><input type="number" step="0.01" data-idx="${idx}" data-col="4" value="${row[4]}"></td>
+      <td class="grp-n2"><input type="number" step="0.01" data-idx="${idx}" data-col="5" value="${row[5]}"></td>
+      <td class="grp-o2"><input type="number" step="0.01" data-idx="${idx}" data-col="6" value="${row[6]}"></td>`;
+    tbody.appendChild(tr);
+  });
+  tbody.querySelectorAll('input').forEach(inp=>{
+    inp.addEventListener('change', ()=>{
+      const idx=+inp.dataset.idx, col=+inp.dataset.col;
+      UD.materials[state.material].rows[idx][col] = parseFloat(inp.value)||0;
+      saveUserData(USER,UD); calc();
+    });
+  });
+}
+function renderBends(){
+  const wrap = $('bendRows'); wrap.innerHTML='';
+  UD.bends.forEach((b,i)=>{
+    const row = document.createElement('div'); row.className='bend-row';
+    row.innerHTML = `<input type="text" placeholder="Назва лінії" value="${b.name}" data-f="name" data-i="${i}">
+      <input type="number" placeholder="К-сть" min="0" value="${b.count}" data-f="count" data-i="${i}">
+      <input type="number" placeholder="Ціна/шт" min="0" step="0.5" value="${b.price}" data-f="price" data-i="${i}">
+      <button class="icon-btn" data-del="${i}">×</button>`;
+    wrap.appendChild(row);
+  });
+  wrap.querySelectorAll('input').forEach(inp=>{
+    inp.addEventListener('input', ()=>{
+      const i=+inp.dataset.i, f=inp.dataset.f;
+      UD.bends[i][f] = (f==='name') ? inp.value : (parseFloat(inp.value)||0);
+      saveUserData(USER,UD); calc();
+    });
+  });
+  wrap.querySelectorAll('[data-del]').forEach(btn=>{
+    btn.onclick = ()=>{ UD.bends.splice(+btn.dataset.del,1); renderBends(); saveUserData(USER,UD); calc(); };
+  });
+}
+$('addBend').onclick = ()=>{ UD.bends.push({name:'Лінія '+(UD.bends.length+1), count:1, price:100}); renderBends(); saveUserData(USER,UD); calc(); };
+
+function interp(rows, thickness, col){
+  for(const r of rows){ if(Math.abs(r[0]-thickness)<1e-9) return r[col]; }
+  const sorted=[...rows].sort((a,b)=>a[0]-b[0]);
+  if(thickness<=sorted[0][0]) return sorted[0][col];
+  if(thickness>=sorted[sorted.length-1][0]) return sorted[sorted.length-1][col];
+  for(let i=0;i<sorted.length-1;i++){
+    const a=sorted[i], b=sorted[i+1];
+    if(thickness>a[0] && thickness<b[0]){ const t=(thickness-a[0])/(b[0]-a[0]); return a[col]+t*(b[col]-a[col]); }
+  }
+  return sorted[sorted.length-1][col];
+}
+
+document.querySelectorAll('#modeToggle button').forEach(t=>{
+  t.onclick = ()=>{
+    document.querySelectorAll('#modeToggle button').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    state.mode = t.dataset.mode;
+    $('manualPane').style.display = state.mode==='manual' ? 'block':'none';
+    $('dxfPane').style.display = state.mode==='dxf' ? 'block':'none';
+    calc();
+  };
+});
+
+$('material').onchange = (e)=>{
+  state.material = e.target.value;
+  buildThicknessOptions(); buildGasToggle(); renderPriceTable();
+  $('pricePerKg').value = UD.pricePerKg[state.material];
+  calc();
+};
+$('pricePerKg').addEventListener('input', ()=>{
+  UD.pricePerKg[state.material] = parseFloat($('pricePerKg').value)||0;
+  saveUserData(USER,UD); calc();
+});
+['thickness','cutLength','pierceCount','qty','cutLengthDxf','pierceCountDxf','qtyDxf','sheetLen','sheetWid','filmOn','filmPrice','vatOn','vatRate','quoteClient'].forEach(id=>{
+  $(id).addEventListener('input', ()=>{ persist(); calc(); });
+  $(id).addEventListener('change', ()=>{ persist(); calc(); });
+});
+
+let lastQuote = null;
+
+function calc(){
+  const d = UD.materials[state.material];
+  const thickness = parseFloat($('thickness').value) || d.rows[0][0];
+  const cols = GAS_COL[state.gas];
+  const pricePerMeter = interp(d.rows, thickness, cols.cut);
+  const pricePerPierce = interp(d.rows, thickness, cols.pierce);
+
+  let lengthMm, pierces, qty;
+  if(state.mode==='manual'){ lengthMm=parseFloat($('cutLength').value)||0; pierces=parseFloat($('pierceCount').value)||0; qty=parseFloat($('qty').value)||1; }
+  else { lengthMm=parseFloat($('cutLengthDxf').value)||0; pierces=parseFloat($('pierceCountDxf').value)||0; qty=parseFloat($('qtyDxf').value)||1; }
+
+  const lengthM = lengthMm/1000;
+  const cutCost = lengthM*pricePerMeter;
+  const pierceCost = pierces*pricePerPierce;
+
+  const sheetLenMm = parseFloat($('sheetLen').value)||0;
+  const sheetWidMm = parseFloat($('sheetWid').value)||0;
+  const weightKg = (sheetLenMm/1000)*(sheetWidMm/1000)*(thickness/1000)*d.density;
+  $('sheetWeight').textContent = weightKg.toFixed(2)+' кг';
+  const pricePerKg = UD.pricePerKg[state.material]||0;
+  const materialCost = weightKg*pricePerKg;
+  $('kgHint').textContent = state.material==='al' ? 'Ціна алюмінію орієнтовна — онови під свого постачальника.' : '';
+
+  let bendCost=0, bendLines=[];
+  UD.bends.forEach(b=>{ const c=(b.count||0)*(b.price||0); bendCost+=c; if(b.count>0) bendLines.push(`${b.name||'Лінія'} (${b.count}×${b.price}грн)`); });
+
+  const filmOn = $('filmOn').checked;
+  const filmPrice = parseFloat($('filmPrice').value)||0;
+  const filmCost = filmOn ? lengthM*filmPrice : 0;
+
+  const perPart = cutCost+pierceCost+bendCost+filmCost;
+  const beforeVat = perPart*qty + materialCost;
+  const vatOn = $('vatOn').checked;
+  const vatRate = parseFloat($('vatRate').value)||0;
+  const vatAmount = vatOn ? beforeVat*vatRate/100 : 0;
+  const total = beforeVat+vatAmount;
+
+  $('totalPrice').innerHTML = total.toFixed(2)+' <span>грн</span>';
+  let html='';
+  html += `<div class="line"><span>Ціна різу (${lengthM.toFixed(2)} м × ${pricePerMeter.toFixed(2)} грн/м)</span><b>${cutCost.toFixed(2)} грн</b></div>`;
+  html += `<div class="line"><span>Пробивки (${pierces} × ${pricePerPierce.toFixed(2)} грн)</span><b>${pierceCost.toFixed(2)} грн</b></div>`;
+  if(bendCost>0) html += `<div class="line"><span>Гибка: ${bendLines.join(', ')}</span><b>${bendCost.toFixed(2)} грн</b></div>`;
+  if(filmOn) html += `<div class="line"><span>Випал плівки (${lengthM.toFixed(2)} м × ${filmPrice.toFixed(2)} грн/м)</span><b>${filmCost.toFixed(2)} грн</b></div>`;
+  html += `<div class="line"><span>Разом на 1 деталь</span><b>${perPart.toFixed(2)} грн</b></div>`;
+  html += `<div class="line"><span>Кількість деталей</span><b>× ${qty}</b></div>`;
+  html += `<div class="line"><span>Вартість листа (${weightKg.toFixed(2)} кг × ${pricePerKg.toFixed(2)} грн/кг)</span><b>${materialCost.toFixed(2)} грн</b></div>`;
+  html += `<div class="line"><span>Без ПДВ</span><b>${beforeVat.toFixed(2)} грн</b></div>`;
+  if(vatOn) html += `<div class="line vat"><span>ПДВ ${vatRate}%</span><b>${vatAmount.toFixed(2)} грн</b></div>`;
+  $('breakdown').innerHTML = html;
+
+  const client = UD.clients.find(c=>c.id===$('quoteClient').value);
+  lastQuote = {
+    date: new Date().toLocaleString('uk-UA'),
+    client: client ? {name:client.name, phone:client.phone} : null,
+    material: d.label, thickness, gas: state.gas.toUpperCase(),
+    lengthM, pricePerMeter, cutCost, pierces, pricePerPierce, pierceCost,
+    bendLines, bendCost, filmOn, filmPrice, filmCost,
+    weightKg, pricePerKg, materialCost, qty, perPart, beforeVat, vatOn, vatRate, vatAmount, total
+  };
+}
+
+/* ============ DXF PARSER (unchanged core) ============ */
+function dxfDist(x1,y1,x2,y2){ return Math.hypot(x2-x1, y2-y1); }
+function dxfBulgeArcLength(x1,y1,x2,y2,bulge){
+  const chord = dxfDist(x1,y1,x2,y2);
+  if(chord===0 || bulge===0) return chord;
+  const theta = 4*Math.atan(bulge);
+  const radius = chord/(2*Math.sin(Math.abs(theta)/2));
+  return radius*Math.abs(theta);
+}
+function dxfEllipseLen(a,b,t0,t1,N){
+  N=N||64; let len=0, prevx=a*Math.cos(t0), prevy=b*Math.sin(t0);
+  for(let k=1;k<=N;k++){ const t=t0+(t1-t0)*k/N; const x=a*Math.cos(t), y=b*Math.sin(t); len+=Math.hypot(x-prevx,y-prevy); prevx=x;prevy=y; }
+  return len;
+}
+function dxfFindSection(pairs, name){
+  for(let i=0;i<pairs.length-1;i++){
+    if(pairs[i].code===0 && pairs[i].value==='SECTION' && pairs[i+1] && pairs[i+1].code===2 && pairs[i+1].value===name){
+      let j=i+2; while(j<pairs.length && !(pairs[j].code===0 && pairs[j].value==='ENDSEC')) j++;
+      return {start:i+2, end:j};
+    }
+  }
+  return null;
+}
+function dxfParseBlocks(pairs){
+  const dict={}; const range = dxfFindSection(pairs,'BLOCKS'); if(!range) return dict;
+  let i=range.start;
+  while(i<range.end){
+    if(pairs[i].code===0 && pairs[i].value==='BLOCK'){
+      let name=null, j=i+1;
+      while(j<range.end && pairs[j].code!==0){ if(pairs[j].code===2 && !name) name=pairs[j].value; j++; }
+      const entStart=j; let k=j;
+      while(k<range.end && !(pairs[k].code===0 && pairs[k].value==='ENDBLK')) k++;
+      if(name) dict[name]={start:entStart,end:k};
+      i=k+1;
+    } else i++;
+  }
+  return dict;
+}
+function dxfUnitScale(pairs){
+  for(let i=0;i<pairs.length-1;i++){
+    if(pairs[i].code===9 && pairs[i].value==='$INSUNITS'){
+      let j=i+1; while(j<pairs.length-1 && pairs[j].code!==70 && pairs[j].code!==9) j++;
+      if(j<pairs.length && pairs[j].code===70){
+        const u=parseInt(pairs[j].value,10);
+        const map={0:1,1:25.4,2:304.8,4:1,5:10,6:1000,13:0.001,14:100};
+        return map[u]!==undefined?map[u]:1;
+      }
+    }
+  }
+  return 1;
+}
+const DXF_KNOWN_TYPES=['LINE','CIRCLE','ARC','ELLIPSE','LWPOLYLINE','POLYLINE','SPLINE','INSERT'];
+function dxfProcessRange(pairs,start,end,scale,layerOverride,blocksDict,bendKeywords,depth,acc){
+  let i=start;
+  while(i<end){
+    const p=pairs[i];
+    if(p.code!==0){ i++; continue; }
+    const type=p.value;
+    if(type==='ENDSEC'||type==='ENDBLK'){ i++; continue; }
+    if(!DXF_KNOWN_TYPES.includes(type)){ i++; continue; }
+    let j=i+1, layer='0';
+    let x1,y1,x2,y2,cx,cy,r,a1,a2,ratio,pStart,pEnd,majX,majY,closedFlag=false,verts=[],curX=null;
+    let blockName=null, insSX=1, insSY=1;
+    if(type==='POLYLINE'){
+      while(j<end && pairs[j].code!==0){ const c=pairs[j].code,v=pairs[j].value; if(c===8) layer=v; if(c===70) closedFlag=(parseInt(v,10)&1)===1; j++; }
+      while(j<end){
+        if(pairs[j].code===0 && pairs[j].value==='VERTEX'){
+          let vx=0,vy=0,vb=0,k=j+1;
+          while(k<end && pairs[k].code!==0){ if(pairs[k].code===10) vx=parseFloat(pairs[k].value); if(pairs[k].code===20) vy=parseFloat(pairs[k].value); if(pairs[k].code===42) vb=parseFloat(pairs[k].value); k++; }
+          verts.push({x:vx,y:vy,bulge:vb}); j=k;
+        } else if(pairs[j].code===0 && pairs[j].value==='SEQEND'){ j++; break; }
+        else if(pairs[j].code===0){ break; } else { j++; }
+      }
+    } else {
+      while(j<end && pairs[j].code!==0){
+        const c=pairs[j].code, v=pairs[j].value;
+        if(c===8) layer=v;
+        if(type==='LINE'){ if(c===10) x1=parseFloat(v); if(c===20) y1=parseFloat(v); if(c===11) x2=parseFloat(v); if(c===21) y2=parseFloat(v); }
+        if(type==='CIRCLE'){ if(c===10) cx=parseFloat(v); if(c===20) cy=parseFloat(v); if(c===40) r=parseFloat(v); }
+        if(type==='ARC'){ if(c===10) cx=parseFloat(v); if(c===20) cy=parseFloat(v); if(c===40) r=parseFloat(v); if(c===50) a1=parseFloat(v); if(c===51) a2=parseFloat(v); }
+        if(type==='ELLIPSE'){ if(c===10) cx=parseFloat(v); if(c===20) cy=parseFloat(v); if(c===11) majX=parseFloat(v); if(c===21) majY=parseFloat(v); if(c===40) ratio=parseFloat(v); if(c===41) pStart=parseFloat(v); if(c===42) pEnd=parseFloat(v); }
+        if(type==='LWPOLYLINE'){ if(c===70) closedFlag=(parseInt(v,10)&1)===1; if(c===10) curX=parseFloat(v); if(c===20) verts.push({x:curX,y:parseFloat(v),bulge:0}); if(c===42){ if(verts.length) verts[verts.length-1].bulge=parseFloat(v); } }
+        if(type==='SPLINE'){ if(c===70) closedFlag=(parseInt(v,10)&1)===1; if(c===10) curX=parseFloat(v); if(c===20) verts.push({x:curX,y:parseFloat(v)}); }
+        if(type==='INSERT'){ if(c===2) blockName=v; if(c===41) insSX=parseFloat(v); if(c===42) insSY=parseFloat(v); }
+        j++;
+      }
+    }
+    const effLayer = (layer && layer!=='0') ? layer : (layerOverride||layer||'0');
+    const isBend = bendKeywords.some(k=>k && effLayer.toUpperCase().includes(k));
+    acc.entityCount++;
+    if(type==='INSERT'){
+      const block = blocksDict[blockName];
+      if(block && depth<6){ const childScale=scale*((Math.abs(insSX)+Math.abs(insSY))/2||1); dxfProcessRange(pairs,block.start,block.end,childScale,effLayer,blocksDict,bendKeywords,depth+1,acc); }
+      else acc.unresolvedInserts++;
+      i=j; continue;
+    }
+    let localLen=0, closed=false;
+    if(type==='LINE'){ localLen=dxfDist(x1,y1,x2,y2); }
+    else if(type==='CIRCLE'){ localLen=2*Math.PI*r; closed=true; }
+    else if(type==='ARC'){ let sweep=a2-a1; if(sweep<0) sweep+=360; localLen=r*(sweep*Math.PI/180); }
+    else if(type==='ELLIPSE'){ const a=Math.hypot(majX,majY), b=a*(ratio||1); const t0=(pStart!==undefined?pStart:0), t1=(pEnd!==undefined?pEnd:2*Math.PI); localLen=dxfEllipseLen(a,b,t0,t1); closed=Math.abs((t1-t0)-2*Math.PI)<1e-3; }
+    else if(type==='LWPOLYLINE'||type==='POLYLINE'){
+      for(let k=0;k<verts.length-1;k++){ const A=verts[k],B=verts[k+1]; localLen += A.bulge?dxfBulgeArcLength(A.x,A.y,B.x,B.y,A.bulge):dxfDist(A.x,A.y,B.x,B.y); }
+      if(closedFlag && verts.length>1){ const A=verts[verts.length-1],B=verts[0]; localLen += A.bulge?dxfBulgeArcLength(A.x,A.y,B.x,B.y,A.bulge):dxfDist(A.x,A.y,B.x,B.y); closed=true; }
+    }
+    else if(type==='SPLINE'){
+      for(let k=0;k<verts.length-1;k++) localLen += dxfDist(verts[k].x,verts[k].y,verts[k+1].x,verts[k+1].y);
+      if(closedFlag && verts.length>1){ localLen += dxfDist(verts[verts.length-1].x,verts[verts.length-1].y,verts[0].x,verts[0].y); closed=true; }
+    }
+    const scaledLen = localLen*scale;
+    if(isBend){ acc.bendLength+=scaledLen; acc.bendCount+=1; }
+    else { acc.cutLength+=scaledLen; if(closed || ((type==='LWPOLYLINE'||type==='POLYLINE'||type==='SPLINE') && verts.length>1)) acc.pierceCount+=1; }
+    i=j;
+  }
+}
+function parseDXF(rawText, bendKeywords){
+  if(rawText.slice(0,20).indexOf('AutoCAD Binary DXF')!==-1) throw new Error('BINARY_DXF');
+  const text = rawText.replace(/^\uFEFF/, '');
+  const lines = text.split(/\r\n|\r|\n/);
+  const pairs=[];
+  for(let i=0;i<lines.length-1;i+=2){ pairs.push({code:parseInt(lines[i].trim(),10), value: lines[i+1]!==undefined?lines[i+1].trim():''}); }
+  const unitScale = dxfUnitScale(pairs);
+  const blocksDict = dxfParseBlocks(pairs);
+  const entRange = dxfFindSection(pairs,'ENTITIES') || {start:0,end:pairs.length};
+  const acc = {cutLength:0,pierceCount:0,bendLength:0,bendCount:0,entityCount:0,unresolvedInserts:0};
+  dxfProcessRange(pairs, entRange.start, entRange.end, 1, null, blocksDict, bendKeywords, 0, acc);
+  acc.cutLength *= unitScale; acc.bendLength *= unitScale; acc.unitScale = unitScale;
+  return acc;
+}
+function getBendKeywords(){ return $('bendLayers').value.split(',').map(s=>s.trim().toUpperCase()).filter(Boolean); }
+function handleFile(file){
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    try{
+      const result = parseDXF(e.target.result, getBendKeywords());
+      $('dxfResult').classList.add('show');
+      $('dxfLen').textContent = result.cutLength.toFixed(1)+' мм';
+      $('dxfPierce').textContent = result.pierceCount;
+      $('dxfEnt').textContent = result.entityCount;
+      $('dxfBend').textContent = result.bendCount+' шт ('+result.bendLength.toFixed(0)+' мм)';
+      $('cutLengthDxf').value = result.cutLength.toFixed(1);
+      $('pierceCountDxf').value = result.pierceCount;
+      UD.bends = UD.bends.filter(b=>!b.fromDxf);
+      if(result.bendCount>0) UD.bends.push({name:'Згин (з DXF)', count:result.bendCount, price:100, fromDxf:true});
+      renderBends(); saveUserData(USER,UD);
+      const warn = $('dxfWarn');
+      let msg = '⚠ Автоматичний розбір DXF приблизний. Перевір результати та відкоригуй вручну, якщо потрібно.';
+      if(result.entityCount===0) msg = '⚠ У файлі не знайдено підтримуваних об\'єктів. Введи параметри вручну нижче.';
+      else if(result.unresolvedInserts>0) msg += ' Не вдалося знайти '+result.unresolvedInserts+' блок(и) (INSERT).';
+      warn.textContent = msg;
+      calc();
+    }catch(err){
+      $('dxfResult').classList.add('show');
+      $('dxfLen').textContent='—'; $('dxfPierce').textContent='—'; $('dxfEnt').textContent='—'; $('dxfBend').textContent='—';
+      $('dxfWarn').textContent = (err && err.message==='BINARY_DXF') ? '⚠ Це бінарний DXF — перезбережи як ASCII DXF.' : '⚠ Не вдалося розібрати файл як DXF.';
+      console.error(err);
+    }
+  };
+  reader.onerror = ()=> alert('Не вдалося прочитати файл.');
+  reader.readAsText(file);
+}
+const dz = $('dropzone');
+dz.onclick = ()=> $('fileInput').click();
+$('fileInput').onchange = (e)=>{ if(e.target.files[0]) handleFile(e.target.files[0]); };
+dz.ondragover = (e)=>{ e.preventDefault(); dz.classList.add('drag'); };
+dz.ondragleave = ()=> dz.classList.remove('drag');
+dz.ondrop = (e)=>{ e.preventDefault(); dz.classList.remove('drag'); if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); };
+
+/* ============ CLIENTS ============ */
+function renderClients(){
+  const list = $('clientsList');
+  const sel = $('quoteClient');
+  const curSel = sel.value;
+  sel.innerHTML = '<option value="">Без клієнта</option>' + UD.clients.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  sel.value = curSel;
+  if(UD.clients.length===0){ list.innerHTML='<div class="empty">Клієнтів ще немає</div>'; return; }
+  list.innerHTML = '<table><thead><tr><th>Ім\'я</th><th>Телефон</th><th>Нотатки</th><th></th></tr></thead><tbody>' +
+    UD.clients.map(c=>`<tr><td>${escapeHtml(c.name)}</td><td>${escapeHtml(c.phone||'')}</td><td>${escapeHtml(c.notes||'')}</td><td><button class="icon-btn" data-delclient="${c.id}">×</button></td></tr>`).join('') +
+    '</tbody></table>';
+  list.querySelectorAll('[data-delclient]').forEach(btn=>{
+    btn.onclick = ()=>{ UD.clients = UD.clients.filter(c=>c.id!==btn.dataset.delclient); saveUserData(USER,UD); renderClients(); };
+  });
+}
+function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s==null?'':s; return d.innerHTML; }
+$('addClientBtn').onclick = ()=>{
+  const name = $('clName').value.trim();
+  if(!name){ alert('Вкажи ім\'я або назву компанії'); return; }
+  UD.clients.push({ id: 'c'+Date.now(), name, phone: $('clPhone').value.trim(), notes: $('clNotes').value.trim() });
+  saveUserData(USER,UD);
+  $('clName').value=''; $('clPhone').value=''; $('clNotes').value='';
+  renderClients();
+};
+
+/* ============ ORDERS ============ */
+function renderOrders(){
+  const list = $('ordersList');
+  if(UD.orders.length===0){ list.innerHTML='<div class="empty">Ще немає збережених замовлень</div>'; return; }
+  const rows = [...UD.orders].reverse().map(o=>{
+    return `<tr>
+      <td>${o.date}</td>
+      <td>${o.client ? escapeHtml(o.client.name) : '<span class="pill">без клієнта</span>'}</td>
+      <td>${escapeHtml(o.material)}, ${o.thickness}мм, ${o.gas}</td>
+      <td>${o.qty} шт</td>
+      <td><b>${o.total.toFixed(2)} грн</b></td>
+      <td><button class="icon-btn" data-delorder="${o.id}">×</button></td>
+    </tr>`;
+  }).join('');
+  list.innerHTML = `<table><thead><tr><th>Дата</th><th>Клієнт</th><th>Матеріал</th><th>К-сть</th><th>Сума</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  list.querySelectorAll('[data-delorder]').forEach(btn=>{
+    btn.onclick = ()=>{ UD.orders = UD.orders.filter(o=>o.id!==btn.dataset.delorder); saveUserData(USER,UD); renderOrders(); };
+  });
+}
+$('saveOrderBtn').onclick = ()=>{
+  if(!lastQuote){ calc(); }
+  const order = Object.assign({id:'o'+Date.now()}, lastQuote);
+  UD.orders.push(order);
+  saveUserData(USER,UD);
+  renderOrders();
+  alert('Замовлення збережено в історію.');
+};
+
+/* ============ EXPORT: PDF (print) ============ */
+function buildPrintHtml(q){
+  const bendRows = q.bendLines.length ? q.bendLines.map(l=>`<div>${escapeHtml(l)}</div>`).join('') : '—';
+  return `
+    <h1>Розрахунок вартості різання</h1>
+    <div>Дата: ${q.date}</div>
+    <div>Клієнт: ${q.client ? escapeHtml(q.client.name)+(q.client.phone?' ('+escapeHtml(q.client.phone)+')':'') : '—'}</div>
+    <h2>Параметри</h2>
+    <table>
+      <tr><th>Матеріал</th><td>${escapeHtml(q.material)}</td></tr>
+      <tr><th>Товщина</th><td>${q.thickness} мм</td></tr>
+      <tr><th>Газ</th><td>${q.gas}</td></tr>
+      <tr><th>Довжина різу</th><td>${q.lengthM.toFixed(2)} м</td></tr>
+      <tr><th>Пробивок</th><td>${q.pierces}</td></tr>
+      <tr><th>Кількість деталей</th><td>${q.qty}</td></tr>
+    </table>
+    <h2>Розрахунок</h2>
+    <table>
+      <tr><th>Різ (${q.lengthM.toFixed(2)} м × ${q.pricePerMeter.toFixed(2)} грн/м)</th><td>${q.cutCost.toFixed(2)} грн</td></tr>
+      <tr><th>Пробивки (${q.pierces} × ${q.pricePerPierce.toFixed(2)} грн)</th><td>${q.pierceCost.toFixed(2)} грн</td></tr>
+      <tr><th>Гибка</th><td>${bendRows}<br><b>${q.bendCost.toFixed(2)} грн</b></td></tr>
+      ${q.filmOn ? `<tr><th>Випал плівки</th><td>${q.filmCost.toFixed(2)} грн</td></tr>` : ''}
+      <tr><th>Разом на 1 деталь</th><td>${q.perPart.toFixed(2)} грн</td></tr>
+      <tr><th>× кількість деталей</th><td>${q.qty}</td></tr>
+      <tr><th>Вартість листа (${q.weightKg.toFixed(2)} кг × ${q.pricePerKg.toFixed(2)} грн/кг)</th><td>${q.materialCost.toFixed(2)} грн</td></tr>
+      <tr><th>Разом без ПДВ</th><td>${q.beforeVat.toFixed(2)} грн</td></tr>
+      ${q.vatOn ? `<tr><th>ПДВ ${q.vatRate}%</th><td>${q.vatAmount.toFixed(2)} грн</td></tr>` : ''}
+      <tr><th><b>Всього до сплати</b></th><td><b>${q.total.toFixed(2)} грн</b></td></tr>
+    </table>
+  `;
+}
+$('pdfBtn').onclick = ()=>{
+  if(!lastQuote) calc();
+  $('printArea').innerHTML = buildPrintHtml(lastQuote);
+  window.print();
+};
+
+/* ============ EXPORT: EXCEL ============ */
+$('xlsBtn').onclick = ()=>{
+  if(!lastQuote) calc();
+  const q = lastQuote;
+  if(typeof XLSX === 'undefined'){ alert('Не вдалося завантажити модуль Excel — перевір інтернет-з\'єднання і спробуй ще раз.'); return; }
+  const rows = [
+    ['Розрахунок вартості різання'],
+    ['Дата', q.date],
+    ['Клієнт', q.client ? q.client.name : ''],
+    ['Телефон', q.client ? q.client.phone||'' : ''],
+    [],
+    ['Матеріал', q.material],
+    ['Товщина, мм', q.thickness],
+    ['Газ', q.gas],
+    ['Довжина різу, м', q.lengthM.toFixed(2)],
+    ['Ціна різу, грн/м', q.pricePerMeter.toFixed(2)],
+    ['Вартість різу, грн', q.cutCost.toFixed(2)],
+    ['Пробивок, шт', q.pierces],
+    ['Ціна пробивки, грн', q.pricePerPierce.toFixed(2)],
+    ['Вартість пробивок, грн', q.pierceCost.toFixed(2)],
+    ['Гибка, грн', q.bendCost.toFixed(2)],
+    ['Випал плівки, грн', q.filmOn ? q.filmCost.toFixed(2) : 0],
+    ['Разом на 1 деталь, грн', q.perPart.toFixed(2)],
+    ['Кількість деталей, шт', q.qty],
+    ['Вага листа, кг', q.weightKg.toFixed(2)],
+    ['Ціна за кг, грн', q.pricePerKg.toFixed(2)],
+    ['Вартість листа, грн', q.materialCost.toFixed(2)],
+    ['Разом без ПДВ, грн', q.beforeVat.toFixed(2)],
+    ['ПДВ %', q.vatOn ? q.vatRate : 0],
+    ['ПДВ, грн', q.vatAmount.toFixed(2)],
+    ['Всього до сплати, грн', q.total.toFixed(2)]
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:28},{wch:20}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Розрахунок');
+  XLSX.writeFile(wb, 'rozrahunok_' + Date.now() + '.xlsx');
+};
+
+/* ============ SETTINGS / BACKUP ============ */
+$('wipeDataBtn').onclick = ()=>{
+  if(!confirm('Видалити всі клієнти, замовлення і налаштування прайсів цього акаунта? Це незворотньо.')) return;
+  UD = defaultUserData();
+  saveUserData(USER,UD);
+  hydrateFromUD();
+  alert('Дані видалено.');
+};
+$('exportBackupBtn').onclick = ()=>{
+  const blob = new Blob([JSON.stringify(UD,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'lasercalc_backup_'+USER+'.json'; a.click();
+  URL.revokeObjectURL(url);
+};
+$('importBackupBtn').onclick = ()=> $('importBackupFile').click();
+$('importBackupFile').onchange = (e)=>{
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    try{
+      const parsed = JSON.parse(ev.target.result);
+      UD = Object.assign(defaultUserData(), parsed);
+      saveUserData(USER,UD);
+      hydrateFromUD();
+      alert('Резервну копію завантажено.');
+    }catch(err){ alert('Не вдалося прочитати файл резервної копії.'); }
+  };
+  reader.readAsText(file);
+};
+
+/* ============ NAV ============ */
+document.querySelectorAll('nav.tabs button').forEach(btn=>{
+  btn.onclick = ()=>{
+    document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    ['calc','clients','orders','team','settings'].forEach(t=>{
+      $('tabpage-'+t).style.display = (t===btn.dataset.tab) ? 'block':'none';
+    });
+    if(btn.dataset.tab==='clients') renderClients();
+    if(btn.dataset.tab==='orders') renderOrders();
+    if(btn.dataset.tab==='team') renderTeam();
+  };
+});
+
+/* ============ TEAM (admin only) ============ */
+function isAdmin(){
+  return CURRENT_USER_EMAIL && ADMIN_EMAIL && ADMIN_EMAIL !== 'ВСТАВ_СВІЙ_EMAIL' && CURRENT_USER_EMAIL.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+}
+async function renderTeam(){
+  const box = $('teamList');
+  box.innerHTML = '<div class="empty">Завантаження…</div>';
+  try{
+    const snap = await db.collection('users').get();
+    const rows = [];
+    snap.forEach(doc=>{
+      const d = doc.data();
+      const email = d.ownerEmail || doc.id;
+      const clients = d.clients || [];
+      const orders = d.orders || [];
+      const revenue = orders.reduce((s,o)=>s+(o.total||0), 0);
+      const clientsHtml = clients.length
+        ? '<ul style="margin:6px 0 0 18px;padding:0;">' + clients.map(c=>`<li>${escapeHtml(c.name)}${c.phone?' — '+escapeHtml(c.phone):''}</li>`).join('') + '</ul>'
+        : '<span class="empty" style="padding:4px 0;">Клієнтів немає</span>';
+      rows.push(`
+        <div class="card" style="margin-top:12px;">
+          <h2 style="margin-bottom:8px;">${escapeHtml(email)}${email.toLowerCase()===ADMIN_EMAIL.toLowerCase() ? ' <span class="pill">це ти</span>' : ''}</h2>
+          <div class="hint">Клієнтів: <b style="color:var(--text);">${clients.length}</b> · Замовлень: <b style="color:var(--text);">${orders.length}</b> · Сума замовлень: <b style="color:var(--text);">${revenue.toFixed(2)} грн</b></div>
+          ${clientsHtml}
+        </div>`);
+    });
+    box.innerHTML = rows.length ? rows.join('') : '<div class="empty">Ще немає жодного акаунта з даними</div>';
+  }catch(err){
+    console.error(err);
+    box.innerHTML = '<div class="empty">Не вдалося завантажити — перевір, що в Firestore Rules додано доступ на читання для твого email, і що є інтернет.</div>';
+  }
+}
+
+/* ============ INTRO ANIMATION ============ */
+function playIntroAnimation(){
+  if(sessionStorage.getItem('lasercalc_intro_played')) return;
+  sessionStorage.setItem('lasercalc_intro_played', '1');
+  const overlay = $('introOverlay');
+  const stage = overlay.querySelector('.intro-stage');
+  const sparksBox = $('introSparks');
+  overlay.style.display = 'flex';
+  overlay.classList.remove('hide');
+
+  const duration = 1300; // must match .intro-beam animation-duration
+  const start = performance.now();
+  let raf;
+  function spawnSpark(xRatio){
+    const rect = stage.getBoundingClientRect();
+    const x = rect.width * xRatio;
+    const y = rect.height/2;
+    const s = document.createElement('div');
+    s.className = 'spark';
+    const angle = Math.random()*Math.PI - Math.PI/2;
+    const dist = 18 + Math.random()*32;
+    const dx = Math.cos(angle)*dist;
+    const dy = -Math.abs(Math.sin(angle)*dist) - 8;
+    s.style.left = x+'px'; s.style.top = y+'px';
+    s.style.setProperty('--spark-end', `translate(${dx}px, ${dy}px)`);
+    sparksBox.appendChild(s);
+    setTimeout(()=> s.remove(), 600);
+  }
+  function tick(now){
+    const t = Math.min(1, (now-start)/duration);
+    if(Math.random() < 0.55) spawnSpark(t);
+    if(t < 1) raf = requestAnimationFrame(tick);
+  }
+  raf = requestAnimationFrame(tick);
+  setTimeout(()=> cancelAnimationFrame(raf), duration+60);
+
+  function finish(){
+    overlay.classList.add('hide');
+    setTimeout(()=>{ overlay.style.display='none'; }, 650);
+  }
+  const autoHide = setTimeout(finish, 2600);
+  $('introSkip').onclick = ()=>{ clearTimeout(autoHide); cancelAnimationFrame(raf); finish(); };
+}
+
+
+function hydrateFromUD(){
+  buildThicknessOptions(); buildGasToggle(); renderPriceTable(); renderBends(); renderClients(); renderOrders();
+  $('pricePerKg').value = UD.pricePerKg[state.material];
+  $('bendLayers').value = UD.bendLayers;
+  $('filmOn').checked = UD.filmOn;
+  $('filmPrice').value = UD.filmPrice;
+  $('vatOn').checked = UD.vatOn;
+  $('vatRate').value = UD.vatRate;
+  $('settingsUser').value = USER;
+  $('teamTabBtn').style.display = isAdmin() ? 'inline-block' : 'none';
+  calc();
+}
+
+
+/* ============ AUTH FLOW ============ */
+$('tabLoginBtn').onclick = ()=>{ $('tabLoginBtn').classList.add('active'); $('tabRegisterBtn').classList.remove('active'); $('loginForm').style.display='block'; $('registerForm').style.display='none'; $('authErr').textContent=''; };
+$('tabRegisterBtn').onclick = ()=>{ $('tabRegisterBtn').classList.add('active'); $('tabLoginBtn').classList.remove('active'); $('registerForm').style.display='block'; $('loginForm').style.display='none'; $('authErr').textContent=''; };
+
+$('doLogin').onclick = async ()=>{
+  $('authErr').textContent='';
+  $('doLogin').disabled = true;
+  try{
+    await loginUser($('loginUser').value, $('loginPass').value);
+    // enterApp() fires automatically via onAuthStateChanged
+  }catch(err){ $('authErr').textContent = err.message; }
+  $('doLogin').disabled = false;
+};
+$('doRegister').onclick = async ()=>{
+  $('authErr').textContent='';
+  $('doRegister').disabled = true;
+  try{
+    if($('regPass').value !== $('regPass2').value) throw new Error('Паролі не співпадають');
+    await registerUser($('regUser').value, $('regPass').value);
+    // enterApp() fires automatically via onAuthStateChanged
+  }catch(err){ $('authErr').textContent = err.message; }
+  $('doRegister').disabled = false;
+};
+$('logoutBtn').onclick = ()=>{
+  auth.signOut();
+  $('loginUser').value=''; $('loginPass').value='';
+};
+
+async function enterApp(user){
+  USER = user.uid;
+  CURRENT_USER_EMAIL = user.email || '';
+  UD = await loadUserData(user.uid);
+  if(UD.ownerEmail !== CURRENT_USER_EMAIL){
+    UD.ownerEmail = CURRENT_USER_EMAIL;
+    saveUserData(USER, UD);
+  }
+  $('userLabel').textContent = user.email || user.uid;
+  $('authScreen').style.display='none';
+  $('appScreen').style.display='block';
+  hydrateFromUD();
+  playIntroAnimation();
+}
+
+/* ============ INIT ============ */
+(function init(){
+  if(FB_NOT_CONFIGURED){
+    $('authScreen').style.display='none';
+    $('setupScreen').style.display='flex';
+    return;
+  }
+  auth.onAuthStateChanged((user)=>{
+    if(user){
+      enterApp(user);
+    } else {
+      USER = null; UD = null;
+      $('appScreen').style.display='none';
+      $('authScreen').style.display='flex';
+    }
+  });
+})();
+</script>
+</body>
+</html>
